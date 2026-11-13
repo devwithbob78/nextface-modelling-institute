@@ -5,7 +5,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
-import { doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+import { doc, setDoc, getDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
 
 const status = document.getElementById("authStatus");
 const showStatus = (message, error = false) => {
@@ -58,12 +58,13 @@ if (loginForm) {
     event.preventDefault();
     try {
       showStatus("Signing you in…");
-      await signInWithEmailAndPassword(
+      const credential = await signInWithEmailAndPassword(
         auth,
         document.getElementById("loginEmail").value.trim(),
         document.getElementById("loginPassword").value
       );
-      window.location.href = "dashboard.html";
+      const adminRecord = await getDoc(doc(db, "admins", credential.user.uid));
+      window.location.href = adminRecord.exists() ? "admin.html" : "dashboard.html";
     } catch (error) {
       showStatus(friendlyError(error), true);
     }

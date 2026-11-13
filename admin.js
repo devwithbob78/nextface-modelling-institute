@@ -1,21 +1,37 @@
-import { auth, db } from "./firebase.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
-const status = document.getElementById("adminStatus");
-onAuthStateChanged(auth, async (user) => {
-  if (!user) { window.location.replace("auth.html"); return; }
-  try {
-    const adminDoc = await getDoc(doc(db, "admins", user.uid));
-    if (!adminDoc.exists()) {
-      status.textContent = "Access denied. This account has not been approved as an administrator.";
-      return;
-    }
-    status.textContent = "Administrator access confirmed. The management tools will be added in the next build.";
-  } catch (error) {
-    status.textContent = "Unable to verify administrator access. Check Firestore rules.";
-  }
+import {auth,db} from "./firebase.js";
+import {onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+import {collection,addDoc,getDocs,doc,deleteDoc,serverTimestamp,query,orderBy} from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+const $=id=>document.getElementById(id), esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=n=>"₦"+Number(n||0).toLocaleString("en-NG",{minimumFractionDigits:2,maximumFractionDigits:2});
+let allowed=false;
+async function rows(name){const s=await getDocs(collection(db,name));return s.docs.map(d=>({id:d.id,...d.data()}));}
+function status(id,msg,error=false){$(id).textContent=msg;$(id).style.color=error?"#ff9b91":"#d8bd7b";}
+function list(id,data,fn,empty="Nothing has been added yet."){$(id).innerHTML=data.length?data.map(fn).join(""):`<p class="empty-state">${empty}</p>`;}
+function row(title,sub,id,collectionName){return `<div class="portal-row"><div class="row-main"><strong>${esc(title)}</strong><small>${esc(sub)}</small></div><button class="dashboard-action delete-record" data-id="${esc(id)}" data-collection="${collectionName}">DELETE</button></div>`;}
+async function refresh(){
+ const [courses,times,ann,fees,students]=await Promise.all([rows("courses"),rows("timetables"),rows("announcements"),rows("fees"),rows("users")]);
+ list("adminCourses",courses,c=>row(c.title||c.name,`${c.duration||"Duration TBC"} · ${c.fee!=null?money(c.fee):"Fee TBC"} · ${c.published?"Published":"Draft"}`,c.id,"courses"),"No courses yet.");
+ list("adminTimetable",times,t=>row(t.title||"Class",`${t.day||""} · ${t.time||""} · ${t.venue||""}`,t.id,"timetables"),"No timetable entries yet.");
+ list("adminAnnouncements",ann,a=>row(a.title||"Announcement",a.message||"",a.id,"announcements"),"No announcements yet.");
+ list("adminFees",fees,f=>row(f.description||"Invoice",`${money(f.amount)} · ${f.status||"unpaid"} · ${f.ownerUid}`,f.id,"fees"),"No invoices issued yet.");
+ list("adminStudents",students,s=>`<div class="portal-row"><div class="row-main"><strong>${esc(s.fullName||"Student")}</strong><small>${esc(s.email||"")} · ${esc(s.accountType||"")}</small></div><span class="status-chip">Registered</span></div>`,"No student profiles found.");
+ document.querySelectorAll(".delete-record").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Delete this record? This cannot be undone."))return;try{await deleteDoc(doc(db,b.dataset.collection,b.dataset.id));await refresh();}catch(e){alert("Could not delete this record. Check Firestore rules.");}}));
+}
+onAuthStateChanged(auth,async user=>{
+ if(!user){window.location.replace("login.html");return;}
+ try{const {getDoc}=await import("https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js");const a=await getDoc(doc(db,"admins",user.uid));
+ if(!a.exists()){ $("adminStatus").textContent="Access denied. This account is not approved as an administrator.";return;}
+ allowed=true;$("adminStatus").textContent="Administrator access verified."; $("adminApp").hidden=false;await refresh();
+ }catch(e){console.error(e);$("adminStatus").textContent="Unable to verify administrator access. Check Firestore rules and connection.";}
 });
-document.getElementById("adminLogout").addEventListener("click", async () => {
-  await signOut(auth);
-  window.location.href = "auth.html";
-});
+document.querySelectorAll("[data-admin-view]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll(".admin-tab").forEach(x=>x.classList.toggle("active",x===b));document.querySelectorAll(".admin-view").forEach(x=>x.classList.toggle("active",x.id==="admin-"+b.dataset.adminView));}));
+function values(form){return Object.fromEntries(new FormData(form).entries());}
+$("courseForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const f=e.currentTarget,v=values(f);try{await addDoc(collection(db,"courses"),{title:v.title,category:v.category,description:v.description,duration:v.duration,fee:v.fee===""?null:Number(v.fee),published:f.elements.published.checked,openToAll:true,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});f.reset();status("courseStatus","Course saved.");await refresh();}catch(err){console.error(err);status("courseStatus","Could not save course. Check Firestore rules.",true);}});
+$("timetableForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const v=values(e.currentTarget);try{await addDoc(collection(db,"timetables"),{...v,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});e.currentTarget.reset();status("timetableStatus","Timetable entry published.");await refresh();}catch(err){console.error(err);status("timetableStatus","Could not publish timetable. Check Firestore rules.",true);}});
+$("announcementForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const v=values(e.currentTarget);try{await addDoc(collection(db,"announcements"),{...v,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});e.currentTarget.reset();status("announcementStatus","Announcement published.");await refresh();}catch(err){console.error(err);status("announcementStatus","Could not publish announcement. Check Firestore rules.",true);}});
+$("feeForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const v=values(e.currentTarget);try{await addDoc(collection(db,"fees"),{ownerUid:v.ownerUid.trim(),description:v.description,amount:Number(v.amount),amountPaid:0,dueDate:v.dueDate||"",status:"unpaid",createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});e.currentTarget.reset();status("feeStatus","Invoice issued to the student's portal. No payment has been processed.");await refresh();}catch(err){console.error(err);status("feeStatus","Could not issue invoice. Check Firestore rules.",true);}});
+$("enrollForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const v=values(e.currentTarget);try{await addDoc(collection(db,"enrollments"),{ownerUid:v.ownerUid.trim(),courseId:v.courseId.trim(),status:"approved",createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});e.currentTarget.reset();status("enrollStatus","Student enrolled successfully.");}catch(err){console.error(err);status("enrollStatus","Could not create enrolment. Check the student UID, course ID and Firestore rules.",true);}});
+$("attendanceForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const v=values(e.currentTarget);try{await addDoc(collection(db,"attendance"),{ownerUid:v.ownerUid.trim(),className:v.className,date:v.date,status:v.status,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});e.currentTarget.reset();status("attendanceStatus","Attendance record saved.");}catch(err){console.error(err);status("attendanceStatus","Could not save attendance. Check Firestore rules.",true);}});
+$("resultForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const v=values(e.currentTarget);if(Number(v.score)>Number(v.outOf)){status("resultStatus","Score cannot be greater than the maximum score.",true);return;}try{await addDoc(collection(db,"results"),{ownerUid:v.ownerUid.trim(),title:v.title,score:Number(v.score),outOf:Number(v.outOf),releasedAt:serverTimestamp(),createdBy:auth.currentUser.uid});e.currentTarget.reset();status("resultStatus","Result published to the student's portal.");}catch(err){console.error(err);status("resultStatus","Could not publish result. Check Firestore rules.",true);}});
+$("materialForm").addEventListener("submit",async e=>{e.preventDefault();if(!allowed)return;const f=e.currentTarget,v=values(f);try{await addDoc(collection(db,"materials"),{title:v.title,description:v.description,type:v.type,url:v.url,published:f.elements.published.checked,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});f.reset();status("materialStatus","Learning material published.");}catch(err){console.error(err);status("materialStatus","Could not publish material. Check Firestore rules.",true);}});
+$("adminLogout").addEventListener("click",async()=>{await signOut(auth);window.location.href="login.html";});

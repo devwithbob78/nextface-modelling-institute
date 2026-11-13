@@ -1,18 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
-      return request.auth != null;
-    }
-    function isOwner(uid) {
-      return signedIn() && request.auth.uid == uid;
-    }
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
     function isAdmin() {
-      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // A user can create and read only their own basic profile.
-    // Admin status is never set by a public registration form.
     match /users/{uid} {
       allow create: if isOwner(uid)
         && request.resource.data.keys().hasOnly(['fullName', 'email', 'accountType', 'createdAt'])
@@ -21,40 +16,83 @@ service cloud.firestore {
         && request.resource.data.accountType in ['adult_learner', 'parent_guardian']
         && request.resource.data.createdAt == request.time;
       allow read: if isOwner(uid) || isAdmin();
-      allow update: if isOwner(uid)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName']);
-      allow delete: if false;
+      allow update: if isAdmin() || (isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName']));
+      allow delete: if isAdmin();
     }
 
-    // Course catalogue can be viewed publicly; only an approved admin can edit it.
-    match /courses/{courseId} {
-      allow read: if true;
-      allow create, update, delete: if isAdmin();
-    }
-
-    // Applications are private to their owner and approved admins.
-    // The client prototype does not yet submit applications.
-    match /applications/{applicationId} {
-      allow create: if signedIn()
-        && request.resource.data.ownerUid == request.auth.uid;
-      allow read: if signedIn()
-        && (resource.data.ownerUid == request.auth.uid || isAdmin());
-      allow update, delete: if isAdmin();
-    }
-
-    // Admin records must be provisioned by the project owner in the console.
     match /admins/{uid} {
       allow read: if isOwner(uid);
       allow write: if false;
     }
 
-    // Payment records must only be written by a trusted server after payment verification.
+    match /courses/{courseId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /enrollments/{enrollmentId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /applications/{applicationId} {
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /fees/{feeId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
     match /payments/{paymentId} {
       allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow write: if false;
     }
 
-    // Deny access to every collection not explicitly allowed above.
+    match /timetables/{entryId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /attendance/{recordId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /results/{resultId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /materials/{materialId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /support/{ticketId} {
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
