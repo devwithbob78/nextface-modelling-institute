@@ -2,7 +2,7 @@ import {auth,db} from "./firebase.js";
 import {onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
 import {collection,addDoc,getDocs,doc,deleteDoc,serverTimestamp,query,orderBy} from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
 const $=id=>document.getElementById(id), esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const money=n=>"₦"+Number(n||0).toLocaleString("en-NG",{minimumFractionDigits:2,maximumFractionDigits:2});
+const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n||0));
 let allowed=false;
 async function rows(name){const s=await getDocs(collection(db,name));return s.docs.map(d=>({id:d.id,...d.data()}));}
 function status(id,msg,error=false){$(id).textContent=msg;$(id).style.color=error?"#ff9b91":"#d8bd7b";}

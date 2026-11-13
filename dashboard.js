@@ -3,8 +3,8 @@ import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/
 import { collection, doc, getDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
 
 const $ = id => document.getElementById(id);
-const money = n => "₦" + Number(n || 0).toLocaleString("en-NG", {minimumFractionDigits:2,maximumFractionDigits:2});
-const safeDate = value => { try { if (!value) return "Date to be confirmed"; const d = value.toDate ? value.toDate() : new Date(value); return isNaN(d) ? "Date to be confirmed" : d.toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"}); } catch { return "Date to be confirmed"; } };
+const money = n => new Intl.NumberFormat("en-US", {style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n || 0));
+const safeDate = value => { try { if (!value) return "Date to be confirmed"; const d = value.toDate ? value.toDate() : new Date(value); return isNaN(d) ? "Date to be confirmed" : d.toLocaleDateString("en-US",{day:"numeric",month:"short",year:"numeric"}); } catch { return "Date to be confirmed"; } };
 const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const setHTML = (id, html) => { if ($(id)) $(id).innerHTML = html; };
 function empty(text){ return `<p class="empty-state">${esc(text)}</p>`; }
@@ -16,7 +16,7 @@ document.querySelectorAll("[data-view]").forEach(link => link.addEventListener("
   document.querySelectorAll(".portal-nav").forEach(x=>x.classList.toggle("active",x.dataset.view===view));
   $("view-"+view)?.classList.add("active"); history.replaceState(null,"","#"+view); window.scrollTo({top:0,behavior:"smooth"});
 }));
-$("todayLabel").textContent = new Date().toLocaleDateString("en-NG",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+$("todayLabel").textContent = new Date().toLocaleDateString("en-US",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
 $("footerYear").textContent = new Date().getFullYear();
 
 async function readCollection(name, constraints=[]){
