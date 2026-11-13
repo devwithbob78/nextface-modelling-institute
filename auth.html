@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#090909"><title>Student Portal | Nextface</title><link rel="stylesheet" href="styles.css"></head>
+<body class="account-page"><main class="account-shell">
+  <a class="brand account-brand" href="index.html"><span class="brand-mark">N<span>✦</span></span><span class="brand-name">NEXTFACE<small>MODELLING INSTITUTE</small></span></a>
+  <h1>Welcome to <em>Nextface.</em></h1><p class="account-intro">Access your learning journey or create an account to enquire about our instructor-led online programs.</p>
+  <div class="account-tabs"><a class="active" href="#register">CREATE ACCOUNT</a><a href="#login">SIGN IN</a></div>
+  <form class="account-form" id="registerForm">
+    <label for="fullName">Full name</label><input id="fullName" autocomplete="name" required maxlength="90" placeholder="Your full name">
+    <label for="registerEmail">Email address</label><input id="registerEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+    <label for="registerPassword">Create password</label><input id="registerPassword" type="password" autocomplete="new-password" minlength="6" required placeholder="At least 6 characters">
+    <label for="accountType">Account type</label><select id="accountType" required><option value="adult_learner">Adult learner (18+)</option><option value="parent_guardian">Parent / legal guardian</option></select>
+    <label class="account-check"><input type="checkbox" id="adultConsent" required><span>I confirm I am at least 18 years old, or I am the parent/legal guardian creating this account. I understand this account does not independently enroll a minor or authorize public display of a child's information.</span></label>
+    <button class="button button-gold" type="submit">CREATE MY ACCOUNT <span>↗</span></button>
+    <p class="account-status" id="authStatus" role="status"></p>
+  </form>
+  <div class="account-back">Already have an account? <a href="login.html">Sign in</a><br><br><a href="index.html">← Back to the institute website</a></div>
+  <p class="account-note">This is an initial account prototype. Do not use it to submit children's sensitive information, photographs, health details or payment information. Parent/guardian consent and safeguarding workflows must be completed before minor enrollment.</p>
+</main><script type="module" src="auth.js"></script></body></html>

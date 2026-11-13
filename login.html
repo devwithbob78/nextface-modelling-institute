@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#090909"><title>Sign In | Nextface</title><link rel="stylesheet" href="styles.css"></head>
+<body class="account-page"><main class="account-shell">
+  <a class="brand account-brand" href="index.html"><span class="brand-mark">N<span>✦</span></span><span class="brand-name">NEXTFACE<small>MODELLING INSTITUTE</small></span></a>
+  <h1>Welcome <em>back.</em></h1><p class="account-intro">Sign in to access your Nextface account.</p>
+  <form class="account-form" id="loginForm">
+    <label for="loginEmail">Email address</label><input id="loginEmail" type="email" autocomplete="email" required placeholder="you@example.com">
+    <label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Your password">
+    <button class="button button-gold" type="submit">SIGN IN <span>↗</span></button>
+    <button class="dashboard-action" type="button" id="resetPassword" style="width:100%;margin-top:12px">FORGOT PASSWORD?</button>
+    <p class="account-status" id="authStatus" role="status"></p>
+  </form>
+  <div class="account-back">New to Nextface? <a href="auth.html">Create an account</a> · <a href="index.html">Home</a></div>
+</main><script type="module" src="auth.js"></script></body></html>
