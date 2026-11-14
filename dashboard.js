@@ -42,7 +42,7 @@ onAuthStateChanged(auth, async user=>{
  try{
   const profileSnap=await getDoc(doc(db,"users",user.uid)); const profile=profileSnap.exists()?profileSnap.data():{};
   const name=profile.fullName||"Student"; $("memberName").textContent=name; $("sideStudentName").textContent=name; $("headerStudentName").textContent=name.toUpperCase(); $("avatarInitials").textContent=name.split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase();
-  $("profileName").textContent=name; $("profileEmail").textContent=user.email||"—"; $("profileType").textContent=profile.accountType==="parent_guardian"?"Parent / Guardian":"Adult learner"; $("profileVerified").textContent=user.emailVerified?"Verified":"Not verified";
+  $("profileName").textContent=name; $("profileEmail").textContent=user.email||"—"; $("profileType").textContent=profile.accountType==="parent_guardian"?"Parent / Guardian":"Adult learner"; $("profileVerified").textContent=user.emailVerified?"Verified":"Not verified"; $("profileGuardian").textContent=profile.guardianName||"Not provided"; $("profileGuardianContact").textContent=[profile.guardianEmail,profile.guardianPhone].filter(Boolean).join(" · ")||"Not provided"; $("profileEmergencyContact").textContent=[profile.emergencyName,profile.emergencyPhone].filter(Boolean).join(" · ")||"Not provided";
   const [courses, enrollments, fees, timetable, classes, attendance, results, materials, announcements, assessments, lessons, examAttempts] = await Promise.all([
    readCollection("courses"), readCollection("enrollments",[where("ownerUid","==",user.uid)]), readCollection("fees",[where("ownerUid","==",user.uid)]),
    readCollection("timetables"), readCollection("classes"), readCollection("attendance",[where("ownerUid","==",user.uid)]),
