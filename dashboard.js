@@ -89,8 +89,8 @@ onAuthStateChanged(auth, async user=>{
   renderList("classesList",[...classes,...timetable],scheduleCard,"No upcoming classes have been scheduled.");
   const visibleAssessments=assessments.filter(a=>a.published===true).sort((a,b)=>String(a.date||"").localeCompare(String(b.date||"")));
   const submittedExamIds=new Set(examAttempts.map(a=>a.examId));
-  renderList("studentAssessments",visibleAssessments,a=>{const attempt=examAttempts.find(x=>x.examId===a.id);const isBuiltIn=a.mode==="built-in";return `<article class="portal-course"><div class="course-topline">${esc(a.type||"ASSESSMENT")} · ${esc(a.courseName||"")}</div><h3>${esc(a.title||"Assessment")}</h3><p>${esc(a.instructions||"Follow the instructions provided by your instructor.")}</p><div class="course-meta"><span>${esc(safeDate(a.date))} · ${esc(a.time||"Time TBC")}</span><span>${esc(String(a.duration||"—"))} min</span></div><p class="dashboard-muted">${esc(String(a.questionCount||"—"))} questions · Timed assessment</p>${attempt?`<span class="status-chip">${esc(attempt.status||"Submitted")}</span>`:isBuiltIn?`<button class="button button-gold start-exam" data-id="${esc(a.id)}">START EXAMINATION</button>`:a.url?`<a class="button button-gold" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN ASSESSMENT ↗</a>`:`<span class="status-chip">Details coming soon</span>`}</article>`;},"No tests or examinations have been scheduled yet.");
-  document.querySelectorAll(".start-exam").forEach(b=>b.addEventListener("click",()=>{const exam=visibleAssessments.find(a=>a.id===b.dataset.id);if(exam)startBuiltInExam(exam,user);}));
+  renderList("studentAssessments",visibleAssessments,a=>{const attempt=examAttempts.find(x=>x.examId===a.id);const isBuiltIn=a.mode==="built-in" || Number(a.questionCount||0)>0;return `<article class="portal-course"><div class="course-topline">${esc(a.type||"ASSESSMENT")} · ${esc(a.courseName||"")}</div><h3>${esc(a.title||"Assessment")}</h3><p>${esc(a.instructions||"Follow the instructions provided by your instructor.")}</p><div class="course-meta"><span>${esc(safeDate(a.date))} · ${esc(a.time||"Time TBC")}</span><span>${esc(String(a.duration||"—"))} min</span></div><p class="dashboard-muted">${esc(String(a.questionCount||"—"))} questions · Timed assessment</p>${attempt?`<span class="status-chip">${esc(attempt.status||"Submitted")}</span>`:isBuiltIn?`<button class="button button-gold start-exam" data-id="${esc(a.id)}">START EXAMINATION</button>`:a.url?`<a class="button button-gold" href="${esc(a.url)}" target="_blank" rel="noopener">OPEN ASSESSMENT ↗</a>`:`<span class="status-chip">Details coming soon</span>`}</article>`;},"No tests or examinations have been scheduled yet.");
+  document.querySelectorAll(".start-exam").forEach(b=>b.addEventListener("click",()=>{const exam=visibleAssessments.find(a=>a.id===b.dataset.id);if(exam)startBuiltInExam(exam,user,examAttempts);}));
   renderList("examHistory",[...examAttempts].sort((a,b)=>(dateValue(b.submittedAt)||new Date(0))-(dateValue(a.submittedAt)||new Date(0))),a=>`<div class="portal-row"><div class="row-main"><strong>${esc(a.examTitle||"Examination")}</strong><small>${esc(safeDate(a.submittedAt))} · ${esc(a.status||"Submitted")}</small></div><strong>${a.status==="graded"?`${esc(a.score??0)} / ${esc(a.outOf??0)}`:"Awaiting grading"}</strong></div>`,"You have not submitted any examinations yet.");
   const visibleLessons=lessons.filter(l=>l.published===true);
   renderList("studentLessons",visibleLessons,l=>`<article class="portal-course"><div class="course-topline">${esc(l.type||"LESSON")} · ${esc(l.courseName||"")}</div><h3>${esc(l.title||"Lesson")}</h3><p>${esc(l.lessonNumber||"")}</p><div class="lesson-content">${esc(l.content||"").replace(/\n/g,"<br>")}</div>${l.url?`<p><a class="under-link" href="${esc(l.url)}" target="_blank" rel="noopener">OPEN LESSON RESOURCE ↗</a></p>`:""}</article>`,"No lessons have been published yet.");
@@ -111,20 +111,42 @@ onAuthStateChanged(auth, async user=>{
   $("portalStatus").hidden=true;
  }catch(err){console.error("Nextface student dashboard load failed:",err);const status=$("portalStatus");if(status){status.hidden=false;status.textContent="Dashboard loading error: "+(err?.code||err?.message||String(err));} }
 });
-async function startBuiltInExam(exam,user){
- if(!exam)return;
+async function startBuiltInExam(exam,user,existingAttempts=[]){
+ if(!exam || !auth.currentUser)return;
+ const host=$("studentAssessments");
+ const alreadySubmitted=(existingAttempts||[]).some(a=>a.examId===exam.id);
+ if(alreadySubmitted){alert("You have already submitted this examination. Check your examination history.");return;}
  try{
-  const prior=await getDocs(query(collection(db,"examAttempts"),where("ownerUid","==",auth.currentUser.uid),where("examId","==",exam.id)));if(!prior.empty){alert("You have already submitted this examination. Check your examination history.");return;}
+  // Use the attempts already loaded for this student. This avoids a compound
+  // ownerUid + examId query that can fail when Firestore has no composite index.
   const snap=await getDocs(query(collection(db,"examQuestions"),where("examId","==",exam.id)));
-  const questions=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.order||0)-(b.order||0));
-  if(!questions.length){alert("This examination has no questions yet. Please contact the instructor.");return;}
-  const host=$("studentAssessments"),duration=Math.max(1,Number(exam.duration||30))*60;let remaining=duration,finished=false;
-  const renderQuestion=q=>`<div class="exam-question"><p><strong>${esc(q.order+1)}. ${esc(q.question)}</strong> <small>(${esc(q.marks)} marks)</small></p>${q.type==="mcq"?q.options.map((o,i)=>`<label class="exam-option"><input type="radio" name="answer-${esc(q.id)}" value="${i}"> ${esc(o)}</label>`).join(""):`<textarea class="exam-essay" data-question="${esc(q.id)}" rows="5" placeholder="Write your answer here..."></textarea>`}</div>`;
-  host.innerHTML=`<article class="portal-card exam-paper"><div class="course-topline">${esc(exam.type||"EXAMINATION")} · ${esc(exam.courseName)}</div><h2>${esc(exam.title)}</h2><p>${esc(exam.instructions||"Answer all questions before submitting.")}</p><div class="exam-timer" id="examTimer">Time remaining: ${Math.floor(remaining/60)}:00</div><form id="builtInExamForm">${questions.map(renderQuestion).join("")}<button class="button button-gold" type="submit">SUBMIT EXAMINATION</button> <button class="dashboard-action" type="button" id="cancelExam">CANCEL</button></form></article>`;
-  const form=$("builtInExamForm"),timer=$("examTimer");const interval=setInterval(()=>{remaining--;timer.textContent=`Time remaining: ${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,"0")}`;if(remaining<=0){clearInterval(interval);form.requestSubmit();}},1000);
-  $("cancelExam").addEventListener("click",()=>{if(confirm("Leave this examination? Your answers will not be submitted.")){clearInterval(interval);window.location.reload();}});
-  form.addEventListener("submit",async e=>{e.preventDefault();if(finished)return;finished=true;clearInterval(interval);const answers=questions.map(q=>({questionId:q.id,type:q.type,answer:q.type==="mcq"?(form.querySelector(`input[name="answer-${q.id}"]:checked`)?.value??""):form.querySelector(`textarea[data-question="${q.id}"]`)?.value||"",marks:Number(q.marks||0)}));if(!confirm("Submit your examination now? You cannot change your answers afterwards.")){finished=false;return;}try{const mcqOutOf=questions.filter(q=>q.type==="mcq").reduce((n,q)=>n+Number(q.marks||0),0),essayOutOf=questions.filter(q=>q.type==="essay").reduce((n,q)=>n+Number(q.marks||0),0);await addDoc(collection(db,"examAttempts"),{examId:exam.id,examTitle:exam.title,ownerUid:auth.currentUser.uid,answers,mcqScore:0,mcqOutOf,essayOutOf,essayScore:0,status:"submitted",submittedAt:serverTimestamp(),duration:exam.duration});alert("Your examination has been submitted. Your objective answers will be automatically marked by the instructor dashboard, and your written answers will be graded by your instructor.");window.location.reload();}catch(err){console.error(err);finished=false;alert("Your answers could not be submitted. Please check your internet connection and try again.");}});
- }catch(err){console.error(err);alert("Unable to load this examination. Please try again.");}
+  const questions=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>Number(a.order||0)-Number(b.order||0));
+  if(!questions.length){alert("This examination has no questions yet. Ask the institute to add questions and publish it again.");return;}
+  const malformed=questions.find(q=>!q.question || !["mcq","essay"].includes(q.type) || (q.type==="mcq" && (!Array.isArray(q.options)||q.options.length<2)));
+  if(malformed){alert("This examination contains an incomplete question. Please contact the institute.");return;}
+  const duration=Math.max(1,Number(exam.duration||30))*60;
+  let remaining=duration,finished=false,interval=null;
+  const renderQuestion=(q,index)=>`<div class="exam-question"><p><strong>${index+1}. ${esc(q.question)}</strong> <small>(${esc(q.marks)} marks)</small></p>${q.type==="mcq"?q.options.map((o,i)=>`<label class="exam-option"><input type="radio" name="answer-${esc(q.id)}" value="${i}"> ${esc(o)}</label>`).join(""):`<textarea class="exam-essay" data-question="${esc(q.id)}" rows="5" placeholder="Write your answer here..."></textarea>`}</div>`;
+  host.innerHTML=`<article class="portal-card exam-paper"><div class="course-topline">${esc(exam.type||"EXAMINATION")} · ${esc(exam.courseName||"")}</div><h2>${esc(exam.title||"Examination")}</h2><p>${esc(exam.instructions||"Answer all questions before submitting.")}</p><div class="exam-timer" id="examTimer">Time remaining: ${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,"0")}</div><form id="builtInExamForm">${questions.map(renderQuestion).join("")}<button class="button button-gold" type="submit">SUBMIT EXAMINATION</button> <button class="dashboard-action" type="button" id="cancelExam">CANCEL</button></form></article>`;
+  const form=$("builtInExamForm"),timer=$("examTimer");
+  const submitExam=async(autoSubmit=false)=>{
+   if(finished)return;finished=true;if(interval)clearInterval(interval);
+   const answers=questions.map(q=>({questionId:q.id,type:q.type,answer:q.type==="mcq"?(form.querySelector(`input[name="answer-${q.id}"]:checked`)?.value??""):form.querySelector(`textarea[data-question="${q.id}"]`)?.value||"",marks:Number(q.marks||0)}));
+   if(!autoSubmit && !confirm("Submit your examination now? You cannot change your answers afterwards.")){finished=false;interval=setInterval(tick,1000);return;}
+   const submitButton=form.querySelector('button[type="submit"]');if(submitButton)submitButton.disabled=true;
+   try{
+    const mcqOutOf=questions.filter(q=>q.type==="mcq").reduce((n,q)=>n+Number(q.marks||0),0);
+    const essayOutOf=questions.filter(q=>q.type==="essay").reduce((n,q)=>n+Number(q.marks||0),0);
+    await addDoc(collection(db,"examAttempts"),{examId:exam.id,examTitle:exam.title||"Examination",ownerUid:auth.currentUser.uid,answers,mcqScore:0,mcqOutOf,essayOutOf,essayScore:0,status:"submitted",submittedAt:serverTimestamp(),duration:Number(exam.duration||30)});
+    alert(autoSubmit?"Time is up. Your examination has been submitted.":"Your examination has been submitted successfully. Your instructor will mark your answers and release your result.");
+    window.location.reload();
+   }catch(err){console.error("Nextface exam submission failed:",err);finished=false;if(submitButton)submitButton.disabled=false;alert("Your answers could not be submitted: "+(err?.code||err?.message||"Please check your connection and try again."));}
+  };
+  function tick(){remaining--;timer.textContent=`Time remaining: ${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,"0")}`;if(remaining<=0){clearInterval(interval);submitExam(true);}}
+  interval=setInterval(tick,1000);
+  $("cancelExam").addEventListener("click",()=>{if(confirm("Leave this examination? Your answers will not be submitted.")){if(interval)clearInterval(interval);window.location.reload();}});
+  form.addEventListener("submit",e=>{e.preventDefault();submitExam(false);});
+ }catch(err){console.error("Nextface examination could not start:",err);alert("Unable to load this examination: "+(err?.code||err?.message||"Please try again."));}
 }
 
 $("supportTicketForm")?.addEventListener("submit",async e=>{
