@@ -67,6 +67,32 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    match /assessments/{assessmentId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Student-visible question text/options; never store correct answers in these documents.
+    match /examQuestions/{questionId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Correct MCQ keys are administrator-only. Students must never read this collection.
+    match /examAnswerKeys/{keyId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Students can submit their own attempt once; only administrators can grade/update it.
+    match /examAttempts/{attemptId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.examId is string;
+      allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
     match /results/{resultId} {
       allow read: if isAdmin() || (signedIn() && resource.data.ownerUid == request.auth.uid);
       allow create, update, delete: if isAdmin();
