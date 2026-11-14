@@ -103,6 +103,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+   match /lessons/{lessonId} {
+     allow read: if signedIn();
+     allow create, update, delete: if isAdmin();
+    }
+
     match /announcements/{announcementId} {
       allow read: if signedIn();
       allow create, update, delete: if isAdmin();
