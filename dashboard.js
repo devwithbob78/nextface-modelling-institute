@@ -40,7 +40,26 @@ async function readCollectionSafe(name, constraints=[]){
 function renderList(id, rows, renderer, message){setHTML(id, rows.length?rows.map(renderer).join(""):empty(message));}
 function courseCard(c){const topics=Array.isArray(c.syllabus)?`<ul class="course-syllabus">${c.syllabus.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:"";return `<article class="portal-course"><div class="course-topline">${esc(c.category||"PROGRAMME")}</div><h3>${esc(c.title||c.name||"Untitled course")}</h3><p>${esc(c.description||"Course details will be provided by the institute.")}</p>${topics}<div class="course-meta"><span>${esc(c.duration||"Duration TBC")}</span><span>${c.fee!=null?money(c.fee):"Fee TBC"}</span></div><span class="status-chip">${esc(c.status||"Published")}</span></article>`;}
 function scheduleCard(s){return `<article class="portal-row"><div class="row-date"><strong>${esc(s.day||safeDate(s.date))}</strong><small>${esc(s.time||"Time TBC")}</small></div><div class="row-main"><strong>${esc(s.title||s.courseName||"Class session")}</strong><small>${esc([s.sessionType,s.instructor,s.venue||s.location].filter(Boolean).join(" · ")||"Details to be confirmed")}</small></div><span class="status-chip">${esc(s.mode||"Class")}</span></article>`;}
+let dashboardAuthStarted=false;
+const dashboardWatchdog=setTimeout(()=>{
+  if(!dashboardAuthStarted){
+    const status=$("portalStatus");
+    if(status){status.hidden=false;status.textContent="Dashboard is waiting for Firebase Authentication. Check your internet connection, Firebase configuration and browser console, then reload.";}
+  }
+},15000);
+window.addEventListener("unhandledrejection",event=>{
+  console.error("Nextface unhandled promise rejection:",event.reason);
+  const status=$("portalStatus");
+  if(status){status.hidden=false;status.textContent="A dashboard operation failed: "+(event.reason?.code||event.reason?.message||"Unknown error");}
+});
+window.addEventListener("error",event=>{
+  console.error("Nextface dashboard runtime error:",event.error||event.message);
+  const status=$("portalStatus");
+  if(status){status.hidden=false;status.textContent="Dashboard error: "+(event.error?.message||event.message||"Unknown JavaScript error");}
+});
+
 onAuthStateChanged(auth, async user=>{
+ dashboardAuthStarted=true; clearTimeout(dashboardWatchdog);
  if(!user){window.location.replace("auth.html");return;}
  $("sideStudentEmail").textContent=user.email||"";
  $("verifyNotice").hidden=user.emailVerified; $("verifyNotice").textContent=user.emailVerified?"":"Your email address is not yet verified. Please use the verification link sent to your inbox.";
@@ -78,7 +97,10 @@ onAuthStateChanged(auth, async user=>{
   renderList("overviewAnnouncements",announcements.slice(0,3),a=>`<div class="portal-row"><div class="row-main"><strong>${esc(a.title||"Institute announcement")}</strong><small>${esc(a.message||"")}</small></div><small>${safeDate(a.createdAt)}</small></div>`,"No announcements yet.");
   renderList("announcementsList",announcements,a=>`<article class="portal-card"><div class="course-topline">${safeDate(a.createdAt)}</div><h3>${esc(a.title||"Institute announcement")}</h3><p class="dashboard-muted">${esc(a.message||"")}</p></article>`,"There are no announcements at the moment.");
   renderList("studentNotifications",notifications.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)),n=>`<article class="portal-card"><div class="course-topline">${safeDate(n.createdAt)}</div><h3>${esc(n.title||"Institute notification")}</h3><p>${esc(n.message||"")}</p></article>`,"No notifications yet.");
-  renderList("studentSupportTickets",supportTickets.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)),t=>`<article class="portal-card"><div class="course-topline">${esc(t.status||"open").replace("_"," ")}</div><h3>${esc(t.subject||"Support request")}</h3><p>${esc(t.message||"")}</p>${t.reply?`<p><strong>Institute reply:</strong> ${esc(t.reply)}</p>`:"<p class="dashboard-muted">Awaiting an institute reply.</p>"}</article>`,"You have not submitted any support requests.");
+  renderList("studentSupportTickets",supportTickets.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)),t=>{
+    const replyHtml=t.reply ? "<p><strong>Institute reply:</strong> "+esc(t.reply)+"</p>" : '<p class="dashboard-muted">Awaiting an institute reply.</p>';
+    return '<article class="portal-card"><div class="course-topline">'+esc(t.status||"open").replace("_"," ")+'</div><h3>'+esc(t.subject||"Support request")+'</h3><p>'+esc(t.message||"")+'</p>'+replyHtml+'</article>';
+  },"You have not submitted any support requests.");
   setHTML("feesList",fees.length?`<table class="portal-table"><thead><tr><th>Description</th><th>Due date</th><th>Amount</th><th>Status</th><th>Receipt</th></tr></thead><tbody>${fees.map(f=>{const paid=String(f.status||"").toLowerCase()==="paid";return `<tr><td>${esc(f.description||"Institute fee")}</td><td>${safeDate(f.dueDate)}</td><td>${money(f.amount)}</td><td><span class="status-chip">${esc(f.status||"unpaid")}</span></td><td>${paid?`<button class="dashboard-action download-receipt" data-id="${esc(f.id)}">DOWNLOAD RECEIPT</button>`:"—"}</td></tr>`;}).join("")}</tbody></table>`:empty("No fee invoices have been issued."));
   document.querySelectorAll(".download-receipt").forEach(b=>b.addEventListener("click",()=>{const f=fees.find(x=>x.id===b.dataset.id);if(f)printReceipt(f,name,user.email||"");}));
   const attCounts={Present:0,Absent:0,Late:0,Excused:0};attendance.forEach(a=>{if(attCounts[a.status]!==undefined)attCounts[a.status]++;});const attTotal=attendance.length,attRate=attTotal?Math.round((attCounts.Present+attCounts.Late)/attTotal*100):0;$("studentAttendanceSummary").textContent=`${attTotal} recorded sessions · ${attCounts.Present} present · ${attCounts.Late} late · ${attCounts.Absent} absent · ${attCounts.Excused} excused · Attendance rate: ${attRate}%`;
@@ -87,7 +109,7 @@ onAuthStateChanged(auth, async user=>{
   document.querySelectorAll(".download-result").forEach(b=>b.addEventListener("click",()=>{const r=results.find(x=>x.id===b.dataset.id);if(!r)return;const w=window.open("","_blank","width=760,height=900");if(!w){alert("Please allow pop-ups to download your result.");return;}w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Nextface Assessment Result</title><style>body{font-family:Arial,sans-serif;color:#171717;padding:40px;max-width:760px;margin:auto}.brand{font: bold 25px Georgia,serif;letter-spacing:3px;color:#111}.gold{color:#9a793c}.rule{border-top:2px solid #b99a5b;margin:24px 0}.item{display:flex;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #ddd}.score{font-size:30px;font-weight:bold;margin:28px 0;color:#80612d}.foot{margin-top:50px;color:#777;font-size:12px}</style></head><body><div class="brand">NEXTFACE <span class="gold">✦</span></div><div class="gold">MODELLING INSTITUTE</div><div class="rule"></div><h1>Assessment Result</h1><div class="item"><span>Student</span><strong>${esc(name)}</strong></div><div class="item"><span>Assessment</span><strong>${esc(r.title||r.courseName||"Assessment")}</strong></div><div class="item"><span>Date released</span><strong>${esc(safeDate(r.releasedAt||r.date))}</strong></div><div class="score">${esc(r.score??"—")} / ${esc(r.outOf??"—")}</div><div class="item"><span>Grade</span><strong>${esc(r.grade||"Not specified")}</strong></div><div class="item"><span>Instructor comment</span><strong>${esc(r.comment||"—")}</strong></div><p class="foot">Official student result issued by Nextface Modelling Institute. Keep this document for your records.</p><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`);w.document.close();}));
   renderList("materialsList",materials.filter(m=>m.published===true),m=>`<article class="portal-course"><div class="course-topline">${esc(m.type||"LEARNING RESOURCE")}</div><h3>${esc(m.title||"Learning material")}</h3><p>${esc(m.description||"")}</p>${m.url?`<a class="under-link" href="${esc(m.url)}" target="_blank" rel="noopener">OPEN MATERIAL ↗</a>`:"<small>Resource link pending</small>"}</article>`,"Your instructors have not published learning materials yet.");
   $("portalStatus").hidden=true;
- }catch(err){console.error(err);$("portalStatus").textContent="Some portal information could not load. Please refresh or contact the institute if the problem continues."; }
+ }catch(err){console.error("Nextface student dashboard load failed:",err);const status=$("portalStatus");if(status){status.hidden=false;status.textContent="Dashboard loading error: "+(err?.code||err?.message||String(err));} }
 });
 async function startBuiltInExam(exam,user){
  if(!exam)return;
@@ -105,5 +127,15 @@ async function startBuiltInExam(exam,user){
  }catch(err){console.error(err);alert("Unable to load this examination. Please try again.");}
 }
 
-$("supportTicketForm")?.addEventListener("submit",async e=>{e.preventDefault();const f=e.currentTarget,v=Object.fromEntries(new FormData(f).entries());const button=f.querySelector("button[type=submit]");button.disabled=true;try{await addDoc(collection(db,"support"),{ownerUid:auth.currentUser.uid,email:auth.currentUser?.email||"",subject:v.subject.trim(),message:v.message.trim(),status:"open",createdAt:serverTimestamp()});f.reset();$("supportTicketStatus").textContent="Your support request has been sent to the institute.";const refreshed=await readCollection("support",[where("ownerUid","==",auth.currentUser.uid)]);renderList("studentSupportTickets",refreshed.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)),t=>`<article class="portal-card"><div class="course-topline">${esc(t.status||"open")}</div><h3>${esc(t.subject||"Support request")}</h3><p>${esc(t.message||"")}</p>${t.reply?`<p><strong>Institute reply:</strong> ${esc(t.reply)}</p>`:"<p class="dashboard-muted">Awaiting an institute reply.</p>"}</article>`,"You have not submitted any support requests.");}catch(err){console.error(err);$("supportTicketStatus").textContent="Could not submit your request. Please try again.";}finally{button.disabled=false;}});
-$("logoutButton").addEventListener("click",async()=>{await signOut(auth);window.location.href="auth.html";});
+$("supportTicketForm")?.addEventListener("submit",async e=>{
+ e.preventDefault();
+ const f=e.currentTarget,v=Object.fromEntries(new FormData(f).entries());
+ const button=f.querySelector("button[type=submit]"); button.disabled=true;
+ try{
+  await addDoc(collection(db,"support"),{ownerUid:auth.currentUser.uid,email:auth.currentUser?.email||"",subject:(v.subject||"").trim(),message:(v.message||"").trim(),status:"open",createdAt:serverTimestamp()});
+  f.reset(); $("supportTicketStatus").textContent="Your support request has been sent to the institute.";
+  const refreshed=await readCollectionSafe("support",[where("ownerUid","==",auth.currentUser.uid)]);
+  renderList("studentSupportTickets",refreshed,t=>'<article class="portal-card"><h3>'+esc(t.subject||"Support request")+'</h3><p>'+esc(t.message||"")+'</p><p>'+esc(t.reply||"Awaiting an institute reply.")+'</p></article>',"You have not submitted any support requests.");
+ }catch(err){console.error("Nextface support submission failed:",err);$("supportTicketStatus").textContent="Could not submit your request: "+(err?.code||err?.message||"Please try again.");}
+ finally{button.disabled=false;}
+});
