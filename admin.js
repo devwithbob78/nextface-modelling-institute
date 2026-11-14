@@ -6,11 +6,13 @@ const $=id=>document.getElementById(id), esc=v=>String(v??"").replace(/[&<>"']/g
 const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(n||0));
 let allowed=false;
 async function rows(name){const s=await getDocs(collection(db,name));return s.docs.map(d=>({id:d.id,...d.data()}));}
+// Keep the admin console usable if one collection is denied or temporarily unavailable.
+async function safeRows(name){try{return await rows(name);}catch(error){console.error(`Nextface admin: could not load ${name}:`,error);return [];}}
 function status(id,msg,error=false){$(id).textContent=msg;$(id).style.color=error?"#ff9b91":"#d8bd7b";}
 function list(id,data,fn,empty="Nothing has been added yet."){$(id).innerHTML=data.length?data.map(fn).join(""):`<p class="empty-state">${empty}</p>`;}
 function row(title,sub,id,collectionName){return `<div class="portal-row"><div class="row-main"><strong>${esc(title)}</strong><small>${esc(sub)}</small></div><button class="dashboard-action delete-record" data-id="${esc(id)}" data-collection="${collectionName}">DELETE</button></div>`;}
 async function refresh(){
- const [courses,times,ann,fees,students,assessments,lessons,attempts,instructors,attendance,supportTickets,notifications]=await Promise.all([rows("courses"),rows("timetables"),rows("announcements"),rows("fees"),rows("users"),rows("assessments"),rows("lessons"),rows("examAttempts"),rows("instructors"),rows("attendance"),rows("support"),rows("notifications")]);
+ const [courses,times,ann,fees,students,assessments,lessons,attempts,instructors,attendance,supportTickets,notifications]=await Promise.all([safeRows("courses"),safeRows("timetables"),safeRows("announcements"),safeRows("fees"),safeRows("users"),safeRows("assessments"),safeRows("lessons"),safeRows("examAttempts"),safeRows("instructors"),safeRows("attendance"),safeRows("support"),safeRows("notifications")]);
  list("adminCourses",courses,c=>`<div class="portal-row course-admin-row"><div class="row-main"><strong>${esc(c.title||c.name||"Untitled course")}</strong><small>${esc(c.duration||"Duration TBC")} · Tuition: ${money(c.fee)} · Registration: ${money(c.registrationFee||0)} · ${c.published?"Published":"Draft"}</small></div><div class="admin-row-actions"><button class="dashboard-action edit-course" data-id="${esc(c.id)}">EDIT / SET FEES</button><button class="dashboard-action delete-record" data-id="${esc(c.id)}" data-collection="courses">DELETE</button></div></div>`,"No courses yet.");
  document.querySelectorAll(".edit-course").forEach(b=>b.addEventListener("click",()=>{
   const c=courses.find(x=>x.id===b.dataset.id); if(!c)return;
